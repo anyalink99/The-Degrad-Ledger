@@ -21,31 +21,40 @@ export function todayStr(offsetDays = 0) {
 
 export function daysAgoStr(n) { return todayStr(-n); }
 
-function latestPerDate(rows) {
-  const m = new Map();
-  for (const r of rows) {
-    const prev = m.get(r.date);
-    if (!prev || String(prev.ts) < String(r.ts)) m.set(r.date, r);
-  }
-  return m;
-}
-
 // Effective score rater→ratee at or before `cutoff` date (YYYY-MM-DD). Null if no initial.
+//
+// Model: the latest `initial` event (by ts, within cutoff) is the anchor — it resets the
+// score at its moment. Only deltas with ts STRICTLY greater than the anchor contribute.
+// Per date, the latest delta wins (so same-day edits overwrite, and a same-day pre-anchor
+// delta is correctly ignored). This preserves onboarding (initial + same-day delta both
+// apply) AND seasonal re-init (new initial wipes pre-reset deltas).
 export function scoreFor(raterId, rateeId, ratings, cutoff = null) {
   const cut = cutoff ?? todayStr();
   const events = ratings.filter(r =>
     r.rater_id === raterId &&
     r.ratee_id === rateeId &&
-    r.date <= cut
+    String(r.date) <= cut
   );
   if (!events.length) return null;
-  const byDate = latestPerDate(events);
-  const sortedDates = [...byDate.keys()].sort();
-  let score = null;
+
+  const initials = events
+    .filter(e => e.kind === 'initial')
+    .sort((a, b) => String(a.ts) < String(b.ts) ? 1 : -1);
+  if (!initials.length) return null;
+  const anchor = initials[0];
+
+  const postAnchorDeltasByDate = new Map();
+  for (const e of events) {
+    if (e.kind !== 'delta') continue;
+    if (!(String(e.ts) > String(anchor.ts))) continue;
+    const prev = postAnchorDeltasByDate.get(e.date);
+    if (!prev || String(prev.ts) < String(e.ts)) postAnchorDeltasByDate.set(e.date, e);
+  }
+
+  const sortedDates = [...postAnchorDeltasByDate.keys()].sort();
+  let score = Number(anchor.value);
   for (const d of sortedDates) {
-    const e = byDate.get(d);
-    if (e.kind === 'initial') score = Number(e.value);
-    else if (e.kind === 'delta' && score !== null) score = applyDelta(score, Number(e.value));
+    score = applyDelta(score, Number(postAnchorDeltasByDate.get(d).value));
   }
   return score;
 }
@@ -92,7 +101,7 @@ export function deltaAt(raterId, rateeId, date, ratings) {
 
 export function noteAt(raterId, rateeId, date, ratings) {
   const rows = ratings
-    .filter(r => r.rater_id === raterId && r.ratee_id === rateeId && r.date === date)
+    .filter(r => r.rater_id === raterId && r.ratee_id === rateeId && r.date === date && r.kind === 'delta')
     .sort((a, b) => (String(a.ts) < String(b.ts) ? 1 : -1));
   const r = rows[0];
   if (!r) return null;
