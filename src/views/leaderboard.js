@@ -1,24 +1,35 @@
 import { html } from 'htm/preact';
 import { useMemo } from 'preact/hooks';
-import { medianScoreAt, weeklyTrend, badgesFor, climbers, medianSeries } from '../compute.js';
+import {
+  medianScoreAt, weeklyTrend, badgesFor, climbers, medianSeries,
+  hasEnoughRaters, initialRaterCount, MIN_RATERS_FOR_SCORE,
+} from '../compute.js';
 import { Kicker, TrendArrow, Sparkline, Badges } from '../components.js';
 
 export function Leaderboard({ state, me }) {
   const { people, ratings } = state;
 
-  const rows = useMemo(() => people.map(p => ({
-    id: p.id,
-    name: p.name,
-    isMe: p.id === me,
-    median: medianScoreAt(p.id, people, ratings),
-    trend: weeklyTrend(p.id, people, ratings),
-    badges: badgesFor(p.id, people, ratings),
-  }))
-  .filter(r => r.median !== null)
-  .sort((a, b) => (b.median ?? -Infinity) - (a.median ?? -Infinity)), [people, ratings, me]);
+  const rows = useMemo(() => people.map(p => {
+    const raters = initialRaterCount(p.id, ratings);
+    const enough = raters >= MIN_RATERS_FOR_SCORE;
+    return {
+      id: p.id,
+      name: p.name,
+      isMe: p.id === me,
+      raters,
+      enough,
+      median: enough ? medianScoreAt(p.id, people, ratings) : null,
+      trend:  enough ? weeklyTrend(p.id, people, ratings) : null,
+      badges: enough ? badgesFor(p.id, people, ratings) : [],
+    };
+  }).sort((a, b) => {
+    if (a.enough !== b.enough) return a.enough ? -1 : 1;
+    if (a.enough) return (b.median ?? -Infinity) - (a.median ?? -Infinity);
+    return a.name.localeCompare(b.name, 'ru');
+  }), [people, ratings, me]);
 
   const climberList = useMemo(
-    () => climbers(people, ratings).filter(c => c.delta > 0).slice(0, 3),
+    () => climbers(people, ratings).filter(c => hasEnoughRaters(c.id, ratings) && c.delta > 0).slice(0, 3),
     [people, ratings],
   );
   const topClimber = climberList[0];
@@ -39,24 +50,15 @@ export function Leaderboard({ state, me }) {
     `;
   }
 
-  if (!rows.length) {
-    return html`
-      <div class="center" style="padding: 100px 0;">
-        <${Kicker}>ТИХИЙ НОМЕР</${Kicker}>
-        <h2 class="headline">Стартовые оценки ещё не выставлены</h2>
-        <p class="deck" style="margin: 0 auto;">
-          Все коллеги должны пройти первый круг — по 0–50 на каждого. Пока этого не случилось, медианы нет.
-        </p>
-      </div>
-    `;
-  }
-
   return html`
     <div class="cols">
       <main>
         <${Kicker}>СТОЛ РАНГОВ · ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }).toUpperCase()}</${Kicker}>
         <h2 class="headline">Медианный приговор редакции</h2>
-        <p class="deck">Каждая строка — человек, оценённый остальными. Щёлкните, чтобы развернуть карточку.</p>
+        <p class="deck">
+          Каждая строка — человек, оценённый остальными. Медиана появляется после ${MIN_RATERS_FOR_SCORE} стартовых оценок.
+          Щёлкните, чтобы развернуть карточку.
+        </p>
         <table class="ledger">
           <thead>
             <tr>
@@ -69,12 +71,14 @@ export function Leaderboard({ state, me }) {
           </thead>
           <tbody>
             ${rows.map((r, i) => html`
-              <tr class="clickable" onClick=${() => { location.hash = '#/person/' + r.id; }}>
-                <td class="rank">${(i + 1).toString().padStart(2, '0')}</td>
+              <tr class=${'clickable' + (r.enough ? '' : ' pending')} onClick=${() => { location.hash = '#/person/' + r.id; }}>
+                <td class="rank">${r.enough ? (i + 1).toString().padStart(2, '0') : '—'}</td>
                 <td class="name">${r.name}${r.isMe ? html` <span class="small-caps muted" style="font-size: 10px;">· ВЫ</span>` : ''}</td>
-                <td class="num" style="text-align: right;">${r.median.toFixed(1)}</td>
-                <td class="num" style="text-align: right;"><${TrendArrow} delta=${r.trend} /></td>
-                <td><${Badges} list=${r.badges} /></td>
+                <td class="num" style="text-align: right;">${r.median !== null ? r.median.toFixed(1) : '—'}</td>
+                <td class="num" style="text-align: right;">${r.trend !== null ? html`<${TrendArrow} delta=${r.trend} />` : html`<span class="trend flat">—</span>`}</td>
+                <td>${r.enough
+                  ? html`<${Badges} list=${r.badges} />`
+                  : html`<span class="small-caps muted" style="font-size: 10px;">${r.raters} ИЗ ${MIN_RATERS_FOR_SCORE} СТАРТОВЫХ</span>`}</td>
               </tr>
             `)}
           </tbody>

@@ -1,6 +1,9 @@
 import { html } from 'htm/preact';
 import { useMemo } from 'preact/hooks';
-import { medianScoreAt, weeklyTrend, medianSeries, peakLow, badgesFor } from '../compute.js';
+import {
+  medianScoreAt, weeklyTrend, medianSeries, peakLow, badgesFor,
+  hasEnoughRaters, initialRaterCount, MIN_RATERS_FOR_SCORE,
+} from '../compute.js';
 import { Kicker, Sparkline, Heatmap, Badges, TrendArrow } from '../components.js';
 
 export function PersonView({ state, id, me }) {
@@ -8,11 +11,22 @@ export function PersonView({ state, id, me }) {
   const person = people.find(p => p.id === id);
   if (!person) return html`<p>Не найдено. <a href="#/">На главную</a></p>`;
 
-  const median = medianScoreAt(id, people, ratings);
-  const trend = weeklyTrend(id, people, ratings);
-  const series = useMemo(() => medianSeries(id, people, ratings, 45), [id, people, ratings]);
-  const { peak, low } = useMemo(() => peakLow(id, people, ratings), [id, people, ratings]);
-  const badges = useMemo(() => badgesFor(id, people, ratings), [id, people, ratings]);
+  const raters = initialRaterCount(id, ratings);
+  const enough = hasEnoughRaters(id, ratings);
+  const median = enough ? medianScoreAt(id, people, ratings) : null;
+  const trend = enough ? weeklyTrend(id, people, ratings) : null;
+  const series = useMemo(
+    () => enough ? medianSeries(id, people, ratings, 45) : [],
+    [id, people, ratings, enough],
+  );
+  const { peak, low } = useMemo(
+    () => enough ? peakLow(id, people, ratings) : { peak: null, low: null },
+    [id, people, ratings, enough],
+  );
+  const badges = useMemo(
+    () => enough ? badgesFor(id, people, ratings) : [],
+    [id, people, ratings, enough],
+  );
 
   const notes = useMemo(() => {
     const m = new Map();
@@ -37,33 +51,43 @@ export function PersonView({ state, id, me }) {
 
       <div class="cols">
         <main>
-          <div style="display:flex; gap: 48px; align-items: baseline; flex-wrap: wrap;">
-            <div>
-              <div class="display-num">${median !== null ? median.toFixed(1) : '—'}</div>
-              <div class="display-num-sub">МЕДИАНА КОЛЛЕГ</div>
-            </div>
-            <div>
-              <div class="display-num sm"><${TrendArrow} delta=${trend} /></div>
-              <div class="display-num-sub">ЗА 7 ДНЕЙ</div>
-            </div>
-            <div>
-              <div class="display-num xs">
-                ${peak?.value !== undefined && peak?.value !== null ? peak.value.toFixed(1) : '—'} /
-                ${low?.value !== undefined && low?.value !== null ? low.value.toFixed(1) : '—'}
+          ${enough ? html`
+            <div style="display:flex; gap: 48px; align-items: baseline; flex-wrap: wrap;">
+              <div>
+                <div class="display-num">${median !== null ? median.toFixed(1) : '—'}</div>
+                <div class="display-num-sub">МЕДИАНА КОЛЛЕГ</div>
               </div>
-              <div class="display-num-sub">ПИК / ДНО (180Д)</div>
+              <div>
+                <div class="display-num sm"><${TrendArrow} delta=${trend} /></div>
+                <div class="display-num-sub">ЗА 7 ДНЕЙ</div>
+              </div>
+              <div>
+                <div class="display-num xs">
+                  ${peak?.value !== undefined && peak?.value !== null ? peak.value.toFixed(1) : '—'} /
+                  ${low?.value !== undefined && low?.value !== null ? low.value.toFixed(1) : '—'}
+                </div>
+                <div class="display-num-sub">ПИК / ДНО (180Д)</div>
+              </div>
             </div>
-          </div>
 
-          <div class="mt-8">
-            <${Kicker}>ДИНАМИКА · 45 ДНЕЙ</${Kicker}>
-            <${Sparkline} series=${series} />
-          </div>
+            <div class="mt-8">
+              <${Kicker}>ДИНАМИКА · 45 ДНЕЙ</${Kicker}>
+              <${Sparkline} series=${series} />
+            </div>
 
-          <div class="mt-6">
-            <${Kicker}>ОТМЕТКИ</${Kicker}>
-            ${badges.length ? html`<${Badges} list=${badges} />` : html`<p class="muted"><em>Пока тихо.</em></p>`}
-          </div>
+            <div class="mt-6">
+              <${Kicker}>ОТМЕТКИ</${Kicker}>
+              ${badges.length ? html`<${Badges} list=${badges} />` : html`<p class="muted"><em>Пока тихо.</em></p>`}
+            </div>
+          ` : html`
+            <div style="padding: 16px 0 8px;">
+              <div class="display-num" style="color: var(--ink-faint);">—</div>
+              <div class="display-num-sub">ПОКА НЕ ОТОБРАЖАЕТСЯ</div>
+              <p class="muted mt-4" style="font-style: italic; max-width: 60ch;">
+                ${`Набралось ${raters} из ${MIN_RATERS_FOR_SCORE} стартовых оценок. Медиана, тренд и история появятся, когда ${person.name} получит минимум ${MIN_RATERS_FOR_SCORE} первых оценок от коллег.`}
+              </p>
+            </div>
+          `}
 
           <div class="mt-8">
             <${Kicker}>КОЛОНКИ ОБОЗРЕВАТЕЛЕЙ · ${notes.length}</${Kicker}>

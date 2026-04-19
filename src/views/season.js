@@ -2,7 +2,7 @@ import { html } from 'htm/preact';
 import { useState } from 'preact/hooks';
 import {
   canSeasonalRefresh, currentSeasonName, currentSeasonStart, currentSeasonLatin,
-  medianScoreAt, scoreFor, latestInitialRow, hasCompletedFirstRound,
+  medianScoreAt, scoreFor, latestInitialRow, hasCompletedFirstRound, hasEnoughRaters,
 } from '../compute.js';
 import { setInitial } from '../api.js';
 import { refresh } from '../state.js';
@@ -82,7 +82,7 @@ export function SeasonView({ state, me }) {
 function SeasonCard({ state, me, person }) {
   const { people, ratings } = state;
   const current = scoreFor(me, person.id, ratings);
-  const groupMedian = medianScoreAt(person.id, people, ratings);
+  const groupMedian = hasEnoughRaters(person.id, ratings) ? medianScoreAt(person.id, people, ratings) : null;
   const suggested = current !== null ? Math.round(Math.max(0, Math.min(50, current))) : 25;
   const [val, setVal] = useState(suggested);
   const [saving, setSaving] = useState(false);

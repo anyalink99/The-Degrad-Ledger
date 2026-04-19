@@ -230,6 +230,12 @@ a:hover { color: var(--oxblood); }
   font-size: 20px;
   font-weight: 700;
 }
+.ledger tr.pending .rank,
+.ledger tr.pending .name,
+.ledger tr.pending .num {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
 
 /* ===== Chips / Badges ===== */
 .chip {

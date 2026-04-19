@@ -2,7 +2,7 @@ import { html } from 'htm/preact';
 import { useState } from 'preact/hooks';
 import {
   medianScoreAt, scoreFor, deltaAt, noteAt, divergenceOf, todayStr,
-  hasCompletedFirstRound, initialRating,
+  hasCompletedFirstRound, initialRating, hasEnoughRaters,
 } from '../compute.js';
 import { setDelta, setInitial } from '../api.js';
 import { refresh } from '../state.js';
@@ -48,8 +48,9 @@ function DispatchCard({ state, me, person }) {
   const today = todayStr();
 
   const myScore = scoreFor(me, person.id, ratings);
-  const groupMedian = medianScoreAt(person.id, people, ratings);
-  const divergence = divergenceOf(me, person.id, people, ratings);
+  const groupVisible = hasEnoughRaters(person.id, ratings);
+  const groupMedian = groupVisible ? medianScoreAt(person.id, people, ratings) : null;
+  const divergence = groupVisible ? divergenceOf(me, person.id, people, ratings) : null;
 
   const existingDelta = deltaAt(me, person.id, today, ratings);
   const existingNote = noteAt(me, person.id, today, ratings);

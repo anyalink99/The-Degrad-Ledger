@@ -1,6 +1,9 @@
 import { html } from 'htm/preact';
 import { useMemo, useState } from 'preact/hooks';
-import { medianSeries, scoreFor, weeklyTrend, peakLow } from '../compute.js';
+import {
+  medianSeries, scoreFor, weeklyTrend, peakLow,
+  hasEnoughRaters, initialRaterCount, MIN_RATERS_FOR_SCORE,
+} from '../compute.js';
 import { Kicker, Sparkline, TrendArrow } from '../components.js';
 import { editNote, deleteNote } from '../api.js';
 import { refresh } from '../state.js';
@@ -8,11 +11,22 @@ import { refresh } from '../state.js';
 export function MyPanel({ state, me }) {
   const { people, ratings } = state;
   const meP = people.find(p => p.id === me);
+  const raters = initialRaterCount(me, ratings);
+  const enough = hasEnoughRaters(me, ratings);
 
-  const mySeries = useMemo(() => medianSeries(me, people, ratings, 45), [me, people, ratings]);
+  const mySeries = useMemo(
+    () => enough ? medianSeries(me, people, ratings, 45) : [],
+    [me, people, ratings, enough],
+  );
   const myNow = mySeries[mySeries.length - 1]?.value ?? null;
-  const myTrend = useMemo(() => weeklyTrend(me, people, ratings), [me, people, ratings]);
-  const { peak, low } = useMemo(() => peakLow(me, people, ratings), [me, people, ratings]);
+  const myTrend = useMemo(
+    () => enough ? weeklyTrend(me, people, ratings) : null,
+    [me, people, ratings, enough],
+  );
+  const { peak, low } = useMemo(
+    () => enough ? peakLow(me, people, ratings) : { peak: null, low: null },
+    [me, people, ratings, enough],
+  );
 
   const incoming = useMemo(() => {
     const m = new Map();
@@ -57,28 +71,38 @@ export function MyPanel({ state, me }) {
 
       <div class="cols">
         <main>
-          <div style="display:flex; gap: 48px; align-items: baseline; flex-wrap: wrap;">
-            <div>
-              <div class="display-num">${myNow !== null ? myNow.toFixed(1) : '—'}</div>
-              <div class="display-num-sub">ТЕКУЩАЯ МЕДИАНА</div>
-            </div>
-            <div>
-              <div class="display-num sm"><${TrendArrow} delta=${myTrend} /></div>
-              <div class="display-num-sub">ЗА 7 ДНЕЙ</div>
-            </div>
-            <div>
-              <div class="display-num xs">
-                ${peak?.value !== undefined && peak?.value !== null ? peak.value.toFixed(1) : '—'} /
-                ${low?.value !== undefined && low?.value !== null ? low.value.toFixed(1) : '—'}
+          ${enough ? html`
+            <div style="display:flex; gap: 48px; align-items: baseline; flex-wrap: wrap;">
+              <div>
+                <div class="display-num">${myNow !== null ? myNow.toFixed(1) : '—'}</div>
+                <div class="display-num-sub">ТЕКУЩАЯ МЕДИАНА</div>
               </div>
-              <div class="display-num-sub">ПИК / ДНО</div>
+              <div>
+                <div class="display-num sm"><${TrendArrow} delta=${myTrend} /></div>
+                <div class="display-num-sub">ЗА 7 ДНЕЙ</div>
+              </div>
+              <div>
+                <div class="display-num xs">
+                  ${peak?.value !== undefined && peak?.value !== null ? peak.value.toFixed(1) : '—'} /
+                  ${low?.value !== undefined && low?.value !== null ? low.value.toFixed(1) : '—'}
+                </div>
+                <div class="display-num-sub">ПИК / ДНО</div>
+              </div>
             </div>
-          </div>
 
-          <div class="mt-8">
-            <${Kicker}>ДИНАМИКА · 45 ДНЕЙ</${Kicker}>
-            <${Sparkline} series=${mySeries} />
-          </div>
+            <div class="mt-8">
+              <${Kicker}>ДИНАМИКА · 45 ДНЕЙ</${Kicker}>
+              <${Sparkline} series=${mySeries} />
+            </div>
+          ` : html`
+            <div style="padding: 16px 0 8px;">
+              <div class="display-num" style="color: var(--ink-faint);">—</div>
+              <div class="display-num-sub">ВАША МЕДИАНА ПОКА СКРЫТА</div>
+              <p class="muted mt-4" style="font-style: italic; max-width: 60ch;">
+                ${`Пока ${raters} из ${MIN_RATERS_FOR_SCORE} коллег выставили вам стартовую оценку. Когда наберётся три — медиана и тренд отобразятся на всех экранах.`}
+              </p>
+            </div>
+          `}
 
           <div class="mt-8">
             <${Kicker}>ВХОДЯЩИЕ КОЛОНКИ О ВАС · ${incoming.length}</${Kicker}>

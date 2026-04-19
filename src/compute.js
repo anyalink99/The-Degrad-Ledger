@@ -59,6 +59,23 @@ export function scoreFor(raterId, rateeId, ratings, cutoff = null) {
   return score;
 }
 
+// ===== Score visibility threshold =====
+// A person's score is only shown publicly after N distinct raters have set an `initial`.
+// Until then, the person still appears in the board, but numbers/badges/trends are hidden.
+export const MIN_RATERS_FOR_SCORE = 3;
+
+export function initialRaterCount(rateeId, ratings) {
+  const set = new Set();
+  for (const r of ratings) {
+    if (r.ratee_id === rateeId && r.kind === 'initial') set.add(r.rater_id);
+  }
+  return set.size;
+}
+
+export function hasEnoughRaters(rateeId, ratings) {
+  return initialRaterCount(rateeId, ratings) >= MIN_RATERS_FOR_SCORE;
+}
+
 export function median(nums) {
   const s = nums.filter(n => n !== null && !Number.isNaN(n)).slice().sort((a, b) => a - b);
   if (!s.length) return null;
