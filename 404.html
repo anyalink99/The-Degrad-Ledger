@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>The Degrad Ledger</title>
+  <script>
+    // Deep-link handler for GitHub Pages.
+    //
+    // When a visitor clicks a URL like
+    //   https://domain/<repo?>/<AKfyc...ID...>[/#hash]
+    // GitHub Pages serves this 404.html because the path isn't a real file.
+    // We extract the Apps Script deployment ID from the path, save the full
+    // web-app URL to localStorage, and redirect back to the project base so
+    // index.html loads with the endpoint already configured. No manual setup.
+    (function () {
+      var segs = location.pathname.split('/').filter(Boolean);
+      var idIdx = -1;
+      for (var i = 0; i < segs.length; i++) {
+        if (/^AKfyc[A-Za-z0-9_-]{40,}$/.test(segs[i])) { idIdx = i; break; }
+      }
+      if (idIdx >= 0) {
+        try {
+          localStorage.setItem(
+            'ledger.endpoint',
+            'https://script.google.com/macros/s/' + segs[idIdx] + '/exec'
+          );
+        } catch (e) {}
+        var base = '/' + segs.slice(0, idIdx).join('/');
+        if (idIdx > 0) base += '/';
+        location.replace(base + location.search + location.hash);
+      } else {
+        // Genuine 404 — go home. On a user.github.io/repo setup the first
+        // segment is the repo; on a custom domain pointing at the repo, it's "/".
+        var home = segs.length > 0 ? '/' + segs[0] + '/' : '/';
+        if (home !== location.pathname) location.replace(home);
+      }
+    })();
+  </script>
+</head>
+<body style="margin: 0; background: #f2ede1; color: #5e584f; font-family: 'EB Garamond', Georgia, serif;">
+  <div style="text-align: center; margin-top: 140px;">
+    <p style="font-style: italic;">Перенаправляем…</p>
+    <p><a href="/" style="color: inherit;">на главную</a></p>
+  </div>
+  <noscript><p style="text-align: center;">Для работы сайта нужен JavaScript.</p></noscript>
+</body>
+</html>
